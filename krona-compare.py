@@ -76,7 +76,7 @@ def parse_args_no_groups(args):
         groups.append((name, [path]))
     return groups
 
-MONKEY_PATCH_JS = """
+SELECT_NODE_MONKEY_PATCH_JS = """
 if (newNode && !window.externallyInitiatedTargeting) {
   const targetName = newNode.name;
   console.log("Searching other windows to select the node with", targetName);
@@ -123,11 +123,32 @@ if (newNode && !window.externallyInitiatedTargeting) {
 }
 """
 
+NAVIGATE_BACK_MONKEY_PATCH_JS = """
+if (!window.externallyInitiatedTargeting) {
+  const otherIframes =
+     window.parent.document.body.getElementsByTagName("iframe");
+  for (let i = 0; i < otherIframes.length; i++) {
+    if (i == %s) {
+      continue;  // only sync the other kronas on the page
+    }
+    const otherIframe = otherIframes[i];
+    const otherWindow = otherIframe.contentWindow;
+    otherWindow.externallyInitiatedTargeting = true;
+    otherWindow.navigateBack();
+    otherWindow.externallyInitiatedTargeting = false;
+  }
+}
+"""
+
 def rewrite_to_update_other_children(raw_html, my_index):
-    return raw_html.replace(
-        "if ( selectedNode != newNode )",
-        "%sif ( selectedNode != newNode )" % (MONKEY_PATCH_JS % (
-            my_index)))
+    for target, js in [
+            ("if ( selectedNode != newNode )",
+             SELECT_NODE_MONKEY_PATCH_JS),
+            ("if ( nodeHistoryPosition > 0 )",
+             NAVIGATE_BACK_MONKEY_PATCH_JS)]:
+        raw_html = raw_html.replace(target, "%s%s" % (
+            js % my_index, target))
+    return raw_html
 
 def start(args):
     if "--group" in args:
