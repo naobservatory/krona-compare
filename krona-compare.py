@@ -164,28 +164,20 @@ def start(args):
 
     combined_html = "combined.krona.html"
     with tempfile.TemporaryDirectory() as tmpdir:
-        krona_names = []
         krona_iframes = []
+        krona_fname =  os.path.join(tmpdir, "krona.html")
+        run_krona(prepare_inputs(groups, tmpdir), krona_fname)
+        with open(krona_fname) as inf:
+            krona_srcdoc_raw = inf.read()
+
         for my_index, (name, fnames) in enumerate(groups):
-            krona_names.append("<th>%s" % html.escape(name))
-
-            krona_fname = os.path.join(tmpdir, name + ".krona.html")
-            run_krona(prepare_inputs([(name, fnames)], tmpdir),
-                      krona_fname)
-
-            with open(krona_fname) as inf:
-                krona_srcdoc_raw = inf.read()
-
             rewritten_html = rewrite_to_update_other_children(
                 krona_srcdoc_raw, my_index)
 
-            with open("tmp.html", "w") as outf:
-                outf.write(rewritten_html)
-
             krona_iframes.append(
-                '<td><iframe srcdoc="%s" height="800px">'
-                '</iframe>' % (
-                    html.escape(rewritten_html, quote=True)))
+              '<td><iframe srcdoc="%s" height="800px" '
+              'onload="maybeSelectDatasets()"></iframe>' %
+                  html.escape(rewritten_html, quote=True))
 
         with open(combined_html, "w") as outf:
             outf.write("""
@@ -193,19 +185,37 @@ def start(args):
   <head>
     <title>Krona Charts</title>
     <style>
-      table { width: 100%% }
-      iframe { width: 100%% }
+      table { width: 100%%; height: 100%% }
+      iframe { width: 100%%; height: 100%% }
     </style>
+    <script>
+    function selectDatasets() {
+      const iframes = document.getElementsByTagName('iframe');
+      for (let i = 0; i < iframes.length; i++) {
+        const otherWindow = iframes[i].contentWindow;
+        otherWindow.document.getElementById(
+          'datasets').selectedIndex = i;
+        otherWindow.onDatasetChange();
+      }
+    }
+    let iframesLoaded = 0;
+    function maybeSelectDatasets() {
+      iframesLoaded++;
+      if (iframesLoaded == %s) {
+        selectDatasets();
+      }
+    }
+    </script>
   </head>
   <body>
     <table>
-      <tr>%s
       <tr>%s
     </table>
   </body>
   </html>
 </html>
-            """ % ("".join(krona_names), "".join(krona_iframes)))
+            """ % (len(krona_iframes),
+                   "".join(krona_iframes)))
 
     subprocess.check_call(["open", combined_html])
 
