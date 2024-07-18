@@ -76,6 +76,59 @@ def parse_args_no_groups(args):
         groups.append((name, [path]))
     return groups
 
+MONKEY_PATCH_JS = """
+if (newNode && !window.externallyInitiatedTargeting) {
+  const targetName = newNode.name;
+  console.log("Searching other windows to select the node with", targetName);
+
+  function findNamedNode(node) {
+    if (node.name == targetName) {
+      return node;
+    }
+    for (const child of node.children) {
+      const possibleTarget = findNamedNode(child);
+      if (possibleTarget) {
+        return possibleTarget;
+      }
+    }
+    return null;
+  }
+
+  const otherIframes = window.parent.document.body.getElementsByTagName(
+      "iframe");
+  for (let i = 0; i < otherIframes.length; i++) {
+    if (i == %s) {
+      continue;  // only sync the other kronas on the page
+    }
+
+    const otherIframe = otherIframes[i];
+    const otherWindow = otherIframe.contentWindow;
+    let other = otherWindow.focusNode;
+    if (!other || other.name == targetName) {
+      continue;
+    }
+    while (other.parent) {
+      other = other.parent;
+    }
+    const otherRoot = other;
+    //console.log("The root in", i, "is", otherRoot);
+    const target = findNamedNode(otherRoot);
+    console.log("The target in", i, "is", target);
+    if (target) {
+      otherWindow.externallyInitiatedTargeting = true;
+      otherWindow.expand(target);
+      otherWindow.externallyInitiatedTargeting = false;
+    }
+  }
+}
+"""
+
+def rewrite_to_update_other_children(raw_html, my_index):
+    return raw_html.replace(
+        "if ( selectedNode != newNode )",
+        "%sif ( selectedNode != newNode )" % (MONKEY_PATCH_JS % (
+            my_index)))
+
 def start(args):
     if "--group" in args:
         groups = parse_args_groups(args)
@@ -92,20 +145,26 @@ def start(args):
     with tempfile.TemporaryDirectory() as tmpdir:
         krona_names = []
         krona_iframes = []
-        for name, fnames in groups:
+        for my_index, (name, fnames) in enumerate(groups):
             krona_names.append("<th>%s" % html.escape(name))
-            
+
             krona_fname = os.path.join(tmpdir, name + ".krona.html")
             run_krona(prepare_inputs([(name, fnames)], tmpdir),
                       krona_fname)
 
             with open(krona_fname) as inf:
                 krona_srcdoc_raw = inf.read()
-                
+
+            rewritten_html = rewrite_to_update_other_children(
+                krona_srcdoc_raw, my_index)
+
+            with open("tmp.html", "w") as outf:
+                outf.write(rewritten_html)
+
             krona_iframes.append(
                 '<td><iframe srcdoc="%s" height="800px">'
                 '</iframe>' % (
-                    html.escape(krona_srcdoc_raw, quote=True)))
+                    html.escape(rewritten_html, quote=True)))
 
         with open(combined_html, "w") as outf:
             outf.write("""
