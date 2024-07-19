@@ -1,13 +1,17 @@
 # Krona Compare
 
 Compare samples with linked [Krona](https://github.com/marbl/Krona/wiki)
-charts.
+charts.  The charts are linked in that it shows multiple ones simultaneously,
+and navigating one chart navigates the others.
 
-Input samples should be in the "cladecounts" format produced by the [NAO MGS
-Pipeline](https://github.com/naobservatory/mgs-pipeline), or any TSV in the
-format:
+Input format is TSV:
 
     <taxid> <n_direct_assignments>
+
+Additional columns are ignored.
+
+This ic compatible with the "cladecounts" format produced by the [NAO MGS
+Pipeline](https://github.com/naobservatory/mgs-pipeline).
 
 ## Dependencies
 
@@ -32,3 +36,15 @@ $ ./updateTaxonomy.sh
 
 If you choose to group inputs, within each group list the counts will be
 combined and presented as a single chart with the provided name.
+
+If you need a more complex grouping, consider writing a program to pre-group
+samples.  For example, running something like [this
+script](https://github.com/naobservatory/jefftk-analysis/blob/main/2024-07-18--prepare-rothman-comparison-for-krona.py)
+which prepares the unnriched [Rothman et
+al. 2021](https://pubmed.ncbi.nlm.nih.gov/34550753/) data for the following
+command:
+
+    ./krona-compare.py --group HTP HTP.tsv \
+                       --group OC OC.tsv \
+                       --group PL PL.tsv \
+                       --group Others JWPCP.tsv NC.tsv SB.tsv SJ.tsv ESC.tsv
