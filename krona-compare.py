@@ -3,6 +3,7 @@
 import os
 import sys
 import html
+import json
 import tempfile
 import subprocess
 from collections import Counter
@@ -140,12 +141,31 @@ if (!window.externallyInitiatedTargeting) {
 }
 """
 
+NAVIGATE_FORWARD_MONKEY_PATCH_JS = """
+if (!window.externallyInitiatedTargeting) {
+  const otherIframes =
+     window.parent.document.body.getElementsByTagName("iframe");
+  for (let i = 0; i < otherIframes.length; i++) {
+    if (i == %s) {
+      continue;  // only sync the other kronas on the page
+    }
+    const otherIframe = otherIframes[i];
+    const otherWindow = otherIframe.contentWindow;
+    otherWindow.externallyInitiatedTargeting = true;
+    otherWindow.navigateForward();
+    otherWindow.externallyInitiatedTargeting = false;
+  }
+}
+"""
+
 def rewrite_to_update_other_children(raw_html, my_index):
     for target, js in [
             ("if ( selectedNode != newNode )",
              SELECT_NODE_MONKEY_PATCH_JS),
             ("if ( nodeHistoryPosition > 0 )",
-             NAVIGATE_BACK_MONKEY_PATCH_JS)]:
+             NAVIGATE_BACK_MONKEY_PATCH_JS),
+            ("if ( nodeHistoryPosition < nodeHistory.length - 1 )",
+             NAVIGATE_FORWARD_MONKEY_PATCH_JS)]:
         raw_html = raw_html.replace(target, "%s%s" % (
             js % my_index, target))
     return raw_html
@@ -162,60 +182,78 @@ def start(args):
                 raise Exception("Missing file %r in group %s" % (
                     fname, name))
 
+    krona_iframes = []
+
     combined_html = "combined.krona.html"
     with tempfile.TemporaryDirectory() as tmpdir:
-        krona_iframes = []
         krona_fname =  os.path.join(tmpdir, "krona.html")
         run_krona(prepare_inputs(groups, tmpdir), krona_fname)
         with open(krona_fname) as inf:
             krona_srcdoc_raw = inf.read()
 
         for my_index, (name, fnames) in enumerate(groups):
-            rewritten_html = rewrite_to_update_other_children(
-                krona_srcdoc_raw, my_index)
-
             krona_iframes.append(
-              '<td><iframe srcdoc="%s" height="800px" '
-              'onload="maybeSelectDatasets()"></iframe>' %
-                  html.escape(rewritten_html, quote=True))
+                '<iframe srcdoc="%s" '
+                'onload="maybeSelectDatasets()"></iframe>' %
+                    html.escape(rewrite_to_update_other_children(
+                        krona_srcdoc_raw, my_index), quote=True))
 
-        with open(combined_html, "w") as outf:
-            outf.write("""
+
+    with open(combined_html, "w") as outf:
+        outf.write("""
 <html>
   <head>
     <title>Krona Charts</title>
     <style>
-      table { width: 100%%; height: 100%% }
-      iframe { width: 100%%; height: 100%% }
+        * { margin: 0; padding: 0; box-sizing: border-box }
     </style>
-    <script>
-    function selectDatasets() {
-      const iframes = document.getElementsByTagName('iframe');
-      for (let i = 0; i < iframes.length; i++) {
-        const otherWindow = iframes[i].contentWindow;
-        otherWindow.document.getElementById(
-          'datasets').selectedIndex = i;
-        otherWindow.onDatasetChange();
-      }
-    }
-    let iframesLoaded = 0;
-    function maybeSelectDatasets() {
-      iframesLoaded++;
-      if (iframesLoaded == %s) {
-        selectDatasets();
-      }
-    }
-    </script>
   </head>
   <body>
-    <table>
-      <tr>%s
-    </table>
+    <script>
+      const n_kronas = %s;
+      function selectDatasets() {
+        const iframes = document.getElementsByTagName('iframe');
+        for (let i = 0; i < iframes.length; i++) {
+          const otherWindow = iframes[i].contentWindow;
+          otherWindow.document.getElementById(
+            'datasets').selectedIndex = i;
+          otherWindow.onDatasetChange();
+        }
+      }
+
+      let iframesLoaded = 0;
+      function maybeSelectDatasets() {
+        iframesLoaded++;
+        if (iframesLoaded == n_kronas) {
+          selectDatasets();
+        }
+      }
+
+      let best_n_rows = 1;
+      let best_n_cols = 1;
+      let best_score = 0;
+      for (let n_rows = 1; n_rows < n_kronas; n_rows++) {
+         const n_cols = Math.ceil(n_kronas / n_rows);
+         const e_width = window.innerWidth / n_cols;
+         const e_height = window.innerHeight / n_rows;
+         score = Math.min(e_width, e_height);
+         if (score > best_score) {
+           best_score = score;
+           best_n_rows = n_rows;
+           best_n_cols = n_cols;
+         }
+      }
+    </script>
+    %s
+    <script>
+      for (const kronaIframe of document.getElementsByTagName("iframe")) {
+        kronaIframe.width = window.innerWidth / best_n_cols;
+        kronaIframe.height = window.innerHeight / best_n_rows;
+      }
+    </script>
   </body>
-  </html>
 </html>
-            """ % (len(krona_iframes),
-                   "".join(krona_iframes)))
+            """ % (len(krona_iframes), "".join(krona_iframes)))
 
     subprocess.check_call(["open", combined_html])
 
