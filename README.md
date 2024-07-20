@@ -10,8 +10,10 @@ Input format is TSV:
 
 Additional columns are ignored.
 
-This ic compatible with the "cladecounts" format produced by the [NAO MGS
+This is compatible with the "cladecounts" format produced by the [NAO MGS
 Pipeline](https://github.com/naobservatory/mgs-pipeline).
+
+![Krona Compare screenshot](https://www.jefftk.com/rothman-krona-combined-big.png)
 
 ## Dependencies
 
