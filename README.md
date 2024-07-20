@@ -4,6 +4,8 @@ Compare samples with linked [Krona](https://github.com/marbl/Krona/wiki)
 charts.  The charts are linked in that it shows multiple ones simultaneously,
 and navigating one chart navigates the others.
 
+![Krona Compare screenshot](https://www.jefftk.com/rothman-krona-combined-big.png)
+
 Input format is TSV:
 
     <taxid> <n_direct_assignments>
@@ -12,8 +14,6 @@ Additional columns are ignored.
 
 This is compatible with the "cladecounts" format produced by the [NAO MGS
 Pipeline](https://github.com/naobservatory/mgs-pipeline).
-
-![Krona Compare screenshot](https://www.jefftk.com/rothman-krona-combined-big.png)
 
 ## Dependencies
 
